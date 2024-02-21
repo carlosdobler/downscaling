@@ -100,7 +100,7 @@ length_time_cmip <- unname(dim(cmip)[3])
 
 # TILE (CELL) LOOP ************************************************************
 
-for (i in 22:nrow(cells_tb)) {
+for (i in 1:nrow(cells_tb)) {
   # for (i in 2:4) {
   
   print(str_glue("PROCESSING CELL {i}"))
@@ -142,7 +142,7 @@ for (i in 22:nrow(cells_tb)) {
   w5e5 <-   
     do.call(c, w5e5)
   
-  length_time_w5e5 <- unname(dim(w5e5)[3])
+  length_time_w5e5 <- unname(dim(w5e5)[3]) # move out of loop?
   
   # align to cmip
   w5e5 <- 
@@ -255,7 +255,7 @@ for (i in 22:nrow(cells_tb)) {
   d <-
     do.call(c, c(d, along = "v"))
   
-  gc()
+  # gc()
   
   
   # now the same with cmip *****************************************************
@@ -348,7 +348,7 @@ for (i in 22:nrow(cells_tb)) {
   e <-
     do.call(c, c(e, along = "v"))
   
-  gc()
+  # gc()
   
   
   # merge both 
@@ -381,32 +381,48 @@ for (i in 22:nrow(cells_tb)) {
       } else {
         
         if (length(narm) > 0) {
-          x <- as.data.frame(x[,-narm])
+          x_train <- as.data.frame(x[1:length_time_w5e5,-narm])
+          x_predict <- as.data.frame(x[(length_time_w5e5+1):nrow(x),-narm])
         } else {
-          x <- as.data.frame(x)
+          x_train <- as.data.frame(x[1:length_time_w5e5,])
+          x_predict <- as.data.frame(x[(length_time_w5e5+1):nrow(x),])
         }
         
-        # m <- lm(V1 ~ ., data = x[1:length_time_w5e5,])
+        # tictoc::tic()
+        # m <- lm(V1 ~ ., data = x_train)
         # p <-
-        #   predict(m, x[(length_time_w5e5+1):nrow(x), -1]) %>%
+        #   predict(m, x_predict) %>%
         #   unname() %>%
         #   {if_else(. < 0, 0, .)}
-        
-        m <- randomForest::randomForest(V1 ~ ., data = x[1:length_time_w5e5,], ntree = 30)
-        p <-
-          predict(m, x[(length_time_w5e5+1):nrow(x), -1]) %>%
-          unname()
-        
-        
-        # cut(x$V1, breaks = 10, labels = F)
-        # 
-        # tictoc::tic()
-        # m <- Cubist::cubist(x = x[,-1], y = x[,1])
         # tictoc::toc()
-        # 
-        # p <- 
-        #   predict(m, x[(length_time_w5e5+1):nrow(x), -1]) %>%
+        
+        # tictoc::tic()
+        cuts <- cut(x_train$V1, breaks = 10, labels = F)
+        x_train_sub <-
+          map_dfr(seq_len(10), function(ii) {
+
+            x_train[cuts == ii,] %>% slice_sample(n = 1000)
+
+          })
+        m <- randomForest::randomForest(V1 ~ ., data = x_train_sub, ntree = 30)
+        p <-
+          predict(m, x_predict) %>%
+          unname()
+        # tictoc::toc()
+        
+        # tictoc::tic()
+        # cuts <- cut(x_train$V1, breaks = 10, labels = F)
+        # x_train_sub <- 
+        #   map_dfr(seq_len(10), function(ii) {
+        #     
+        #     x_train[cuts == ii,] %>% slice_sample(n = 1000)
+        #     
+        #   })
+        # m <- Cubist::cubist(x = x_train_sub[,-1], y = x_train_sub[,1])
+        # p <-
+        #   predict(m, x_predict) %>%
         #   unname()
+        # tictoc::toc()
         
       }
       
@@ -442,14 +458,20 @@ for (i in 22:nrow(cells_tb)) {
 }
 
 
+# 16:28 Jan 5
+
 "/mnt/pers_disk/temp/" %>% 
-  fs::dir_ls(regexp = "rf", invert = T) %>% 
+  fs::dir_ls(regexp = "rf") %>% 
   map(read_stars, RasterIO = list(bands = 6999)) -> a
 
+do.call(st_mosaic, a) -> aa
+
+aa %>% mapview::mapview()
+
 
 
 "/mnt/pers_disk/temp/" %>% 
-  fs::dir_ls(regexp = "rf", invert = T) %>% 
+  fs::dir_ls(regexp = "cu") %>% 
   map(read_stars, RasterIO = list(bands = 1:4015)) -> a
 
 a %>% 
